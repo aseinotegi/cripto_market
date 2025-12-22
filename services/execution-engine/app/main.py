@@ -20,24 +20,27 @@ MOCK_PRICE_BTC = 88000.0 # Fallback if we don't have price feed here
 # Let's listen to 'market.trades' or 'market.candles.15m' to update internal price reference.
 # Or simpler: listen to 'features.realtime' which has 'close' price.
 
-current_prices = {} # symbol -> float
 
-consumer = KafkaConsumer(
-    "orders.request",
-    "features.realtime", # To get prices
-    bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-    value_deserializer=lambda m: json.loads(m.decode('utf-8')),
-    auto_offset_reset='latest',
-    group_id="execution-engine-group" 
-)
+# Portfolio State (Start with $100)
+class Portfolio:
+    def __init__(self, initial_cash=100.0):
+        self.cash = initial_cash
+        self.positions = {} # symbol -> quantity
+        self.start_equity = initial_cash
+        
+    def get_equity(self, current_prices: dict):
+        equity = self.cash
+        for sym, qty in self.positions.items():
+            price = current_prices.get(sym, 0)
+            equity += qty * price
+        return equity
 
-producer = KafkaProducer(
-    bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-    value_serializer=lambda v: json.dumps(v).encode('utf-8')
-)
+portfolio = Portfolio(initial_cash=100.0)
 
 async def process_loop():
-    log.info("Starting Execution Engine (Paper Trading)...")
+    log.info("Starting Execution Engine (Paper Trading - $100 Portfolio)...")
+    
+    last_portfolio_emit = 0
     
     while True:
         msg_batch = consumer.poll(timeout_ms=100)
@@ -54,6 +57,25 @@ async def process_loop():
                         feats = data.get("features", {})
                         if sym and "close" in feats:
                             current_prices[sym] = feats["close"]
+                            
+                        # Emit Portfolio Update periodically (every ~1s on price update)
+                        # To show Unrealized PnL moving
+                        now = datetime.utcnow().timestamp()
+                        if now - last_portfolio_emit > 1.0:
+                             equity = portfolio.get_equity(current_prices)
+                             pnl = equity - portfolio.start_equity
+                             pnl_pct = (pnl / portfolio.start_equity) * 100
+                             
+                             update = {
+                                 "timestamp": now,
+                                 "equity": equity,
+                                 "cash": portfolio.cash,
+                                 "pnl": pnl,
+                                 "pnl_pct": pnl_pct,
+                                 "positions": portfolio.positions
+                             }
+                             producer.send("portfolio.updates", value=json.dumps(update).encode('utf-8'))
+                             last_portfolio_emit = now
                             
                     elif topic == "orders.request":
                         order = OrderRequestEvent(**data)
@@ -92,11 +114,21 @@ async def process_loop():
                             timestamp=datetime.utcnow()
                         )
                         
+                        # Update Portfolio (Paper Trade)
+                        cost = fill_price * order.quantity
+                        if order.side == "buy":
+                            portfolio.cash -= (cost + fee)
+                            portfolio.positions[order.symbol] = portfolio.positions.get(order.symbol, 0) + order.quantity
+                        else:
+                            portfolio.cash += (cost - fee)
+                            current_qty = portfolio.positions.get(order.symbol, 0)
+                            portfolio.positions[order.symbol] = max(0, current_qty - order.quantity) # Don't go short for MVP
+                        
                         # Simulate Latency
                         await asyncio.sleep(random.uniform(0.05, 0.2))
                         
                         producer.send("fills", value=fill.model_dump(mode='json'))
-                        log.info("Order Filled", price=fill_price, quantity=order.quantity)
+                        log.info("Order Filled", price=fill_price, quantity=order.quantity, balance=portfolio.cash)
 
                 except Exception as e:
                     log.error("Error processing message", error=str(e))

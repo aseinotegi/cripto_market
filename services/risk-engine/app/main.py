@@ -39,11 +39,18 @@ async def process_loop():
                     log.info("Received Signal", type=signal.signal_type, symbol=signal.symbol)
                     
                     # MVP Risk Logic:
-                    # If ENTRY_LONG -> Create Buy Order
-                    # If EXIT_LONG -> Create Sell Order
+                    # Trade Amount: 50 USDT (to support $100 starting balance)
+                    TRADE_AMOUNT_USDT = 50.0
                     
-                    # Position Sizing (Fixed Amount for MVP)
-                    quantity = 0.001 # Mock BTC quantity
+                    # Extract price from signal reason (provided by Signal Engine)
+                    price = 90000.0 # Fallback
+                    if signal.reason and "close" in signal.reason:
+                        price = float(signal.reason["close"])
+                        
+                    quantity = TRADE_AMOUNT_USDT / price
+                    
+                    # Round quantity to suitable precision (BTC: 5 decimals for safety)
+                    quantity = round(quantity, 5)
                     
                     side = None
                     if signal.signal_type == "ENTRY_LONG":
@@ -60,7 +67,7 @@ async def process_loop():
                             quantity=quantity
                         )
                         producer.send("orders.request", value=order.model_dump(mode='json'))
-                        log.info("Approved Order", side=side, symbol=signal.symbol)
+                        log.info("Approved Order", side=side, symbol=signal.symbol, quantity=quantity, price_ref=price)
                     
                 except Exception as e:
                     log.error("Error processing signal", error=str(e))
