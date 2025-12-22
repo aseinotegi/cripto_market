@@ -1,0 +1,24 @@
+[project]
+name = "signal-engine"
+version = "0.1.0"
+description = "Strategy Execution Service"
+authors = [
+    {name = "Your Name",email = "you@example.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "kafka-python-ng (>=2.2.3,<3.0.0)",
+    "pydantic (>=2.12.5,<3.0.0)",
+    "structlog (>=25.5.0,<26.0.0)",
+    "python-dotenv (>=1.2.1,<2.0.0)",
+    "common @ file:///home/ubuntu/cripto_market/libs/common"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.dependencies]
+common = {develop = true}

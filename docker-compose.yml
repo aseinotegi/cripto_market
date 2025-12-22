@@ -1,0 +1,150 @@
+version: '3.8'
+
+
+
+services:
+  # -------------------------------------------------------------------------
+  # INFRASTRUCTURE
+  # -------------------------------------------------------------------------
+
+  # Message Bus (Redpanda) - Single node for dev
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v23.2.14
+    profiles: ["infra"]
+    command:
+      - redpanda
+      - start
+      - --smp 1
+      - --memory 512M
+      - --reserve-memory 0M
+      - --overprovisioned
+      - --node-id 0
+      - --check=false
+      - --kafka-addr PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:29092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:9092,OUTSIDE://localhost:29092
+      - --pandaproxy-addr 0.0.0.0:8082
+      - --advertise-pandaproxy-addr localhost:8082
+    ports:
+      - 29092:29092 # Kafka Client
+      - 9644:9644   # Admin
+      - 8081:8081   # Schema Registry
+      - 8082:8082   # HTTP Proxy
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    deploy:
+      resources:
+        limits:
+          memory: 600M
+
+  # Database (TimescaleDB)
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    profiles: ["infra"]
+    environment:
+      POSTGRES_USER: antigravity
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: quant_trading
+    ports:
+      - 5432:5432
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+
+  # Cache (Redis)
+  redis:
+    image: redis:7-alpine
+    profiles: ["infra"]
+    ports:
+      - 6379:6379
+    deploy:
+      resources:
+        limits:
+          memory: 50M
+    volumes:
+      - redis_data:/data
+
+
+  # Object Storage (MinIO)
+  minio:
+    image: minio/minio
+    profiles: ["infra"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password123
+    ports:
+      - 9000:9000
+      - 9001:9001
+    volumes:
+      - minio_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 150M
+
+  # -------------------------------------------------------------------------
+  # OBSERVABILITY
+  # -------------------------------------------------------------------------
+  
+  prometheus:
+    image: prom/prometheus
+    profiles: ["infra"]
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - 9090:9090
+    deploy:
+      resources:
+        limits:
+          memory: 150M
+
+  grafana:
+    image: grafana/grafana
+    profiles: ["infra"]
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - 3000:3000
+    volumes:
+      - grafana_data:/var/lib/grafana
+    deploy:
+      resources:
+        limits:
+          memory: 150M
+
+  loki:
+    image: grafana/loki:2.9.2
+    profiles: ["infra"]
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - 3100:3100
+    deploy:
+      resources:
+        limits:
+          memory: 100M
+
+  # -------------------------------------------------------------------------
+  # CORE SERVICES (Placeholders for next steps)
+  # -------------------------------------------------------------------------
+  # api-gateway:
+  #   build: ./services/api-gateway
+  #   profiles: ["core"]
+  #   ...
+
+  # frontend:
+  #   build: ./apps/web
+  #   profiles: ["ui"]
+  #   ...
+
+volumes:
+  redpanda_data:
+  timescaledb_data:
+  redis_data:
+  minio_data:
+  prometheus_data:
+  grafana_data:

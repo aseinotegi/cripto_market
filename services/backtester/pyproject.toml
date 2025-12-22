@@ -1,0 +1,27 @@
+[project]
+name = "backtester"
+version = "0.1.0"
+description = "Backtesting Pipeline using VectorBT"
+authors = [
+    {name = "Your Name",email = "you@example.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy (<2.0.0)",
+    "vectorbt (>=0.28.2,<0.29.0)",
+    "pandas (>=2.3.3,<3.0.0)",
+    "matplotlib (>=3.10.8,<4.0.0)",
+    "plotly (>=6.5.0,<7.0.0)",
+    "ipywidgets (>=8.1.8,<9.0.0)",
+    "common @ file:///home/ubuntu/cripto_market/libs/common",
+    "yfinance (>=1.0,<2.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.dependencies]
+common = {develop = true}

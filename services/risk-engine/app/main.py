@@ -1,0 +1,71 @@
+import asyncio
+import os
+import json
+import structlog
+from kafka import KafkaConsumer, KafkaProducer
+from common.schemas import SignalEvent, OrderRequestEvent
+from uuid import uuid4
+
+log = structlog.get_logger()
+
+# Config
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+MAX_POSITION_SIZE = 1000.0 # USDT
+
+consumer = KafkaConsumer(
+    "signals",
+    bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+    value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+    auto_offset_reset='latest',
+    group_id="risk-engine-group" 
+)
+
+producer = KafkaProducer(
+    bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+)
+
+async def process_loop():
+    log.info("Starting Risk Engine...")
+    
+    while True:
+        msg_batch = consumer.poll(timeout_ms=100)
+        
+        for tp, messages in msg_batch.items():
+            for message in messages:
+                try:
+                    data = message.value
+                    signal = SignalEvent(**data)
+                    log.info("Received Signal", type=signal.signal_type, symbol=signal.symbol)
+                    
+                    # MVP Risk Logic:
+                    # If ENTRY_LONG -> Create Buy Order
+                    # If EXIT_LONG -> Create Sell Order
+                    
+                    # Position Sizing (Fixed Amount for MVP)
+                    quantity = 0.001 # Mock BTC quantity
+                    
+                    side = None
+                    if signal.signal_type == "ENTRY_LONG":
+                        side = "buy"
+                    elif signal.signal_type == "EXIT_LONG":
+                        side = "sell"
+                    
+                    if side:
+                        # Emitting Order Request
+                        order = OrderRequestEvent(
+                            symbol=signal.symbol,
+                            side=side,
+                            type="market",
+                            quantity=quantity
+                        )
+                        producer.send("orders.request", value=order.model_dump(mode='json'))
+                        log.info("Approved Order", side=side, symbol=signal.symbol)
+                    
+                except Exception as e:
+                    log.error("Error processing signal", error=str(e))
+        
+        await asyncio.sleep(0.01)
+
+if __name__ == "__main__":
+    asyncio.run(process_loop())
