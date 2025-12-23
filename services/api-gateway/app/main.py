@@ -24,8 +24,13 @@ async def lifespan(app: FastAPI):
     global db_pool
     db_pool = await asyncpg.create_pool(DB_DSN)
     log.info("DB Pool created")
+    # Start Kafka consumer task
+    log.info("Creating Kafka consumer task...")
+    consumer_task = asyncio.create_task(kafka_consumer_task())
+    log.info("Kafka consumer task created")
     yield
     # Shutdown
+    consumer_task.cancel()
     await db_pool.close()
     log.info("DB Pool closed")
 
@@ -99,6 +104,7 @@ async def kafka_consumer_task():
         "orders.submitted",
         "fills",
         "portfolio.updates",
+        "features.realtime",  # For RSI and other indicators
         bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
         value_deserializer=lambda m: json.loads(m.decode('utf-8')),
         auto_offset_reset='latest',
@@ -149,8 +155,4 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
-# Start consumer on startup
-@app.on_event("startup")
-async def start_consumer():
-    asyncio.create_task(kafka_consumer_task())
 
