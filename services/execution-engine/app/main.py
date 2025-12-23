@@ -37,6 +37,22 @@ class Portfolio:
 
 portfolio = Portfolio(initial_cash=100.0)
 
+consumer = KafkaConsumer(
+    "orders.request",
+    "features.realtime",
+    bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+    value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+    auto_offset_reset='latest',
+    group_id="execution-engine-group"
+)
+
+producer = KafkaProducer(
+    bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+)
+
+current_prices = {}
+
 async def process_loop():
     log.info("Starting Execution Engine (Paper Trading - $100 Portfolio)...")
     

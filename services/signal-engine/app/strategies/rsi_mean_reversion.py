@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict
 from common.schemas import FeatureVectorEvent, SignalEvent
-from app.strategy_interface import Strategy
+from strategy_interface import Strategy
 from datetime import datetime
 
 class RsiMeanReversionStrategy(Strategy):

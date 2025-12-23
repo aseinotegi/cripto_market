@@ -4,7 +4,7 @@ import json
 import structlog
 from kafka import KafkaConsumer, KafkaProducer
 from common.schemas import FeatureVectorEvent
-from app.strategies.rsi_mean_reversion import RsiMeanReversionStrategy
+from strategies.rsi_mean_reversion import RsiMeanReversionStrategy
 
 log = structlog.get_logger()
 
